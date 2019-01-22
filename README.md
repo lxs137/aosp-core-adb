@@ -8,3 +8,17 @@ cd aosp-core-adb
 git checkout android-7.1.2_r28
 cp -r ./adb <AOSP_DIR>/system/core/adb
 ```
+* Compile Adb Daemon (x86 32bit)
+```bash
+export AOSP7_HOME=/path/to/aosp/7
+. build/envsetup.sh
+lunch aosp_x86-eng 
+make out/target/product/generic_x86/root/sbin/adbd
+```
+* Compile Adb Host (linux x86)
+```bash
+export AOSP7_HOME=/path/to/aosp/7
+. build/envsetup.sh
+lunch aosp_x86-eng 
+make out/host/linux-x86/bin/adbd
+```
