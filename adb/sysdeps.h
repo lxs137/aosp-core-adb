@@ -718,8 +718,18 @@ static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg,
     return false;
 }
 
-static __inline__ bool adb_thread_cancel(adb_thread_t thread) {
-    errno = pthread_cancel(thread);
+static __inline__ bool adb_thread_kill(adb_thread_t thread, int sig) {
+    errno = pthread_kill(thread, sig);
+    return errno == 0;
+}
+
+static __inline__ bool adb_thread_sigaction(int sig, void (*handler)(int)) {
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    action.sa_handler = handler;
+    errno = sigaction(sig, &action, NULL);
     return errno == 0;
 }
 

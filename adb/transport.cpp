@@ -197,6 +197,10 @@ static void read_transport_thread(void* _t) {
 
     adb_thread_setname(android::base::StringPrintf("<-%s",
                                                    (t->serial != nullptr ? t->serial : "transport")));
+    adb_thread_sigaction(SIGUSR1, [](int sig) -> void {
+      D("Thread(%ld) Receive Sig(%d)", adb_thread_id(), sig);
+      adb_thread_exit();
+    });
     D("%s: starting read_transport thread on fd %d, SYNC online (%d)",
        t->serial, t->fd, t->sync_token + 1);
     p = get_apacket();
@@ -255,6 +259,10 @@ static void write_transport_thread(void* _t) {
 
     adb_thread_setname(android::base::StringPrintf("->%s",
                                                    (t->serial != nullptr ? t->serial : "transport")));
+    adb_thread_sigaction(SIGUSR1, [](int sig) -> void {
+        D("Thread(%ld) Receive Sig(%d)", adb_thread_id(), sig);
+        adb_thread_exit();
+    });
     D("%s: starting write_transport thread, reading from fd %d",
        t->serial, t->fd);
 
@@ -545,13 +553,17 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
 
         fdevent_set(&(t->transport_fde), FDE_READ);
 
-        if (!adb_thread_create(write_transport_thread, t, t->write_thread)) {
+        adb_thread_t write_thread, read_thread;
+        if (!adb_thread_create(write_transport_thread, t, &write_thread)) {
             fatal_errno("cannot create write_transport thread");
         }
 
-        if (!adb_thread_create(read_transport_thread, t, t->read_thread)) {
+        if (!adb_thread_create(read_transport_thread, t, &read_thread)) {
             fatal_errno("cannot create read_transport thread");
         }
+
+        t->write_thread = new adb_thread_t(write_thread);
+        t->read_thread = new adb_thread_t(read_thread);
     }
 
     adb_mutex_lock(&transport_lock);
@@ -962,20 +974,21 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
                 // Force Stop Old Transport Read/Write Thread
                 fprintf(stderr, "Free transport: %s\n", transport->serial);
 
+                bool kill_read_status = adb_thread_kill(*(transport->read_thread), SIGUSR1);
+                bool kill_write_status = adb_thread_kill(*(transport->write_thread), SIGUSR1);
+
+                fprintf(stderr, "Wait transport read/write thread terminated: %d, %d\n", kill_read_status, kill_write_status);
+                adb_thread_join(*(transport->read_thread));
+                adb_thread_join(*(transport->write_thread));
+                fprintf(stderr, "Transport read/write thread has terminated\n");
+
+                delete transport->read_thread;
+                delete transport->write_thread;
+
                 transport->Kick();
                 transport->ref_count = 0;
                 transport->close(transport);
-                transport->force_free();
-
-                adb_thread_cancel(*(transport->read_thread));
-                adb_thread_cancel(*(transport->write_thread));
-
-                fprintf(stderr, "Wait transport read/write terminated\n");
-                adb_thread_join(*(transport->read_thread));
-                adb_thread_join(*(transport->write_thread));
-                fprintf(stderr, "Transport read/write has terminated\n");
-
-                delete transport;
+                remove_transport(transport);
             }
 #endif
             adb_mutex_unlock(&transport_lock);

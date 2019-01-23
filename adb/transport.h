@@ -73,8 +73,6 @@ public:
     adb_thread_t *write_thread = nullptr;
 
     void force_free() {
-        D("transport: %s removing and free'ing %d", this->serial, this->transport_socket);
-
         fdevent_remove(&(this->transport_fde));
         adb_close(this->fd);
 
