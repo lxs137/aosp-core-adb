@@ -718,6 +718,11 @@ static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg,
     return false;
 }
 
+static __inline__ bool adb_thread_cancel(adb_thread_t thread) {
+    errno = pthread_cancel(thread);
+    return errno == 0;
+}
+
 static __inline__ bool adb_thread_join(adb_thread_t thread) {
     errno = pthread_join(thread, nullptr);
     return errno == 0;

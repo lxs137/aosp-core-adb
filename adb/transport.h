@@ -68,6 +68,28 @@ public:
     }
     void Kick();
 
+    // To Kill TransportReadThread and TransportWriteThread
+    adb_thread_t *read_thread = nullptr;
+    adb_thread_t *write_thread = nullptr;
+
+    void force_free() {
+        D("transport: %s removing and free'ing %d", this->serial, this->transport_socket);
+
+        fdevent_remove(&(this->transport_fde));
+        adb_close(this->fd);
+
+        if (this->product)
+            free(this->product);
+        if (this->serial)
+            free(this->serial);
+        if (this->model)
+            free(this->model);
+        if (this->device)
+            free(this->device);
+        if (this->devpath)
+            free(this->devpath);
+    }
+
     int fd = -1;
     int transport_socket = -1;
     fdevent transport_fde;

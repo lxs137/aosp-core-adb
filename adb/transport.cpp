@@ -545,11 +545,11 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
 
         fdevent_set(&(t->transport_fde), FDE_READ);
 
-        if (!adb_thread_create(write_transport_thread, t)) {
+        if (!adb_thread_create(write_transport_thread, t, t->write_thread)) {
             fatal_errno("cannot create write_transport thread");
         }
 
-        if (!adb_thread_create(read_transport_thread, t)) {
+        if (!adb_thread_create(read_transport_thread, t, t->read_thread)) {
             fatal_errno("cannot create read_transport thread");
         }
     }
@@ -957,6 +957,27 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
 
     for (const auto& transport : transport_list) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
+#if !ADB_HOST
+            if(strcmp(serial, "host") == 0) {
+                // Force Stop Old Transport Read/Write Thread
+                fprintf(stderr, "Free transport: %s\n", transport->serial);
+
+                transport->Kick();
+                transport->ref_count = 0;
+                transport->close(transport);
+                transport->force_free();
+
+                adb_thread_cancel(*(transport->read_thread));
+                adb_thread_cancel(*(transport->write_thread));
+
+                fprintf(stderr, "Wait transport read/write terminated\n");
+                adb_thread_join(*(transport->read_thread));
+                adb_thread_join(*(transport->write_thread));
+                fprintf(stderr, "Transport read/write has terminated\n");
+
+                delete transport;
+            }
+#endif
             adb_mutex_unlock(&transport_lock);
             delete t;
             return -1;
