@@ -20,5 +20,5 @@ make out/target/product/generic_x86/root/sbin/adbd
 export AOSP7_HOME=/path/to/aosp/7
 . build/envsetup.sh
 lunch aosp_x86-eng 
-make out/host/linux-x86/bin/adbd
+make out/host/linux-x86/bin/adb
 ```
