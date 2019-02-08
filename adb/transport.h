@@ -25,6 +25,8 @@
 
 #include "adb.h"
 
+constexpr time_t TRANSPORT_BEAT_INTERVAL = 60 * 10; // 10 min
+
 typedef std::unordered_set<std::string> FeatureSet;
 
 const FeatureSet& supported_features();
@@ -53,6 +55,7 @@ public:
         transport_fde = {};
         protocol_version = A_VERSION;
         max_payload = MAX_PAYLOAD;
+        last_beat_stamp = time(nullptr);
     }
 
     virtual ~atransport() {}
@@ -96,6 +99,7 @@ public:
     ConnectionState connection_state = kCsOffline;
     bool online = false;
     TransportType type = kTransportAny;
+    time_t last_beat_stamp = 0; // seconds
 
     // USB handle or socket fd as needed.
     usb_handle* usb = nullptr;
@@ -174,6 +178,7 @@ atransport* acquire_one_transport(TransportType type, const char* serial,
                                   bool* is_ambiguous, std::string* error_out);
 void kick_transport(atransport* t);
 void update_transports(void);
+void force_stop_transport(atransport* t);
 
 void init_transport_registration(void);
 std::string list_transports(bool long_listing);

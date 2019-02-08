@@ -39,6 +39,7 @@ constexpr size_t MAX_PAYLOAD = MAX_PAYLOAD_V2;
 #define A_CLSE 0x45534c43
 #define A_WRTE 0x45545257
 #define A_AUTH 0x48545541
+#define A_BEAT 0x54414542
 
 // ADB protocol version.
 #define A_VERSION 0x01000000

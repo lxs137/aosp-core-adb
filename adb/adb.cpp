@@ -314,6 +314,18 @@ static void handle_new_connection(atransport* t, apacket* p) {
 #endif
 }
 
+static void handle_heartbeat(atransport* t, apacket* p) {
+    t->last_beat_stamp = time(nullptr);
+#if !ADB_HOST
+    apacket* cp = get_apacket();
+    cp->msg.command = A_BEAT;
+    cp->msg.arg0 = 0;
+    cp->msg.arg1 = 0;
+    cp->msg.data_length = 0;
+    send_packet(cp, t);
+#endif
+}
+
 void handle_packet(apacket *p, atransport *t)
 {
     asocket *s;
@@ -325,6 +337,10 @@ void handle_packet(apacket *p, atransport *t)
     print_packet("recv", p);
 
     switch(p->msg.command){
+    case A_BEAT:
+        handle_heartbeat(t, p);
+        break;
+
     case A_SYNC:
         if(p->msg.arg0){
             send_packet(p, t);

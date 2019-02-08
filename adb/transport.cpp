@@ -320,6 +320,30 @@ static fdevent transport_registration_fde;
 
 #if ADB_HOST
 
+static void check_transport_thread(void* _data) {
+    adb_thread_setname("check_transport");
+    D("starting check_transport thread");
+
+    for(;;){
+        for (const auto& transport : transport_list) {
+            time_t cur_time = time(nullptr);
+            if(cur_time - transport->last_beat_stamp >= 2 * TRANSPORT_BEAT_INTERVAL) {
+                adb_mutex_lock(&transport_lock);
+                force_stop_transport(transport);
+                adb_mutex_unlock(&transport_lock);
+            } else {
+                apacket* cp = get_apacket();
+                cp->msg.command = A_BEAT;
+                cp->msg.arg0 = 0;
+                cp->msg.arg1 = 0;
+                cp->msg.data_length = 0;
+                send_packet(cp, transport);
+            }
+            sleep(TRANSPORT_BEAT_INTERVAL);
+        }
+    }
+}
+
 /* this adds support required by the 'track-devices' service.
  * this is used to send the content of "list_transport" to any
  * number of client connections that want it through a single
@@ -592,6 +616,13 @@ void init_transport_registration(void)
                     0);
 
     fdevent_set(&transport_registration_fde, FDE_READ);
+
+#if ADB_HOST
+    adb_thread_t check_thread;
+    if (!adb_thread_create(check_transport_thread, nullptr, &check_thread)) {
+        fatal_errno("cannot create check_transport thread");
+    }
+#endif
 }
 
 /* the fdevent select pump is single threaded */
@@ -617,6 +648,28 @@ static void remove_transport(atransport *transport)
     }
 }
 
+// Force Stop Transport Read/Write Thread
+void force_stop_transport(atransport* transport) {
+    fprintf(stderr, "Free transport: %s\n", transport->serial);
+
+    if(transport->read_thread != nullptr && transport->write_thread != nullptr) {
+        bool kill_read_status = adb_thread_kill(*(transport->read_thread), SIGUSR1);
+        bool kill_write_status = adb_thread_kill(*(transport->write_thread), SIGUSR1);
+
+        fprintf(stderr, "Wait transport read/write thread terminated: %d, %d\n", kill_read_status, kill_write_status);
+        adb_thread_join(*(transport->read_thread));
+        adb_thread_join(*(transport->write_thread));
+        fprintf(stderr, "Transport read/write thread has terminated\n");
+
+        delete transport->read_thread;
+        delete transport->write_thread;
+    }
+
+    transport->Kick();
+    transport->ref_count = 0;
+    transport->close(transport);
+    remove_transport(transport);
+}
 
 static void transport_unref(atransport* t) {
     CHECK(t != nullptr);
@@ -971,24 +1024,7 @@ int register_socket_transport(int s, const char *serial, int port, int local) {
         if (transport->serial && strcmp(serial, transport->serial) == 0) {
 #if !ADB_HOST
             if(strcmp(serial, "host") == 0) {
-                // Force Stop Old Transport Read/Write Thread
-                fprintf(stderr, "Free transport: %s\n", transport->serial);
-
-                bool kill_read_status = adb_thread_kill(*(transport->read_thread), SIGUSR1);
-                bool kill_write_status = adb_thread_kill(*(transport->write_thread), SIGUSR1);
-
-                fprintf(stderr, "Wait transport read/write thread terminated: %d, %d\n", kill_read_status, kill_write_status);
-                adb_thread_join(*(transport->read_thread));
-                adb_thread_join(*(transport->write_thread));
-                fprintf(stderr, "Transport read/write thread has terminated\n");
-
-                delete transport->read_thread;
-                delete transport->write_thread;
-
-                transport->Kick();
-                transport->ref_count = 0;
-                transport->close(transport);
-                remove_transport(transport);
+                force_stop_transport(transport);
             }
 #endif
             adb_mutex_unlock(&transport_lock);
