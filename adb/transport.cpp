@@ -325,12 +325,11 @@ static void check_transport_thread(void* _data) {
     D("starting check_transport thread");
 
     for(;;){
-        for (const auto& transport : transport_list) {
+        adb_mutex_lock(&transport_lock);
+        for (auto& transport : transport_list) {
             time_t cur_time = time(nullptr);
             if(cur_time - transport->last_beat_stamp >= 2 * TRANSPORT_BEAT_INTERVAL) {
-                adb_mutex_lock(&transport_lock);
                 force_stop_transport(transport);
-                adb_mutex_unlock(&transport_lock);
             } else {
                 apacket* cp = get_apacket();
                 cp->msg.command = A_BEAT;
@@ -339,8 +338,10 @@ static void check_transport_thread(void* _data) {
                 cp->msg.data_length = 0;
                 send_packet(cp, transport);
             }
-            sleep(TRANSPORT_BEAT_INTERVAL);
         }
+        adb_mutex_unlock(&transport_lock);
+        D("check_transport thread epoch end");
+        sleep(TRANSPORT_BEAT_INTERVAL);
     }
 }
 
